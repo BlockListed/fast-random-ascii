@@ -12,8 +12,7 @@ harness = false
 [dependencies]
 rand = "0.8.5"
 rand_xorshift = "0.3.0"
-glommio = "0.8"
-futures-lite = "1.13.0"
+tokio = { version = "1.28", features = ["rt", "macros", "sync", "fs", "io-std", "io-util"] }
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
