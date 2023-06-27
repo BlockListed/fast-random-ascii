@@ -1,10 +1,10 @@
 # fast-random-ascii
 * BLAZINGLY FAST 🚀🚀
-    * 11Gib/S in my testing (to `/dev/null`)
-* Multithreaded
-* Generates random ascii characters (excluding control codes) extremely quickly
+    * 11Gib/s in my testing (to `/dev/null`).
+* Multithreaded.
+* Generates random ascii characters (excluding control codes) extremely quickly.
 * WARNING: The random generator is NOT cryptographically secure.
-    * But its reasonably statistically random [1][xorshiftrng]
+    * But its reasonably statistically random [1][xorshiftrng].
 * WARNING: The first 69 ascii characters are 33.3% more likely to appear. (this is probably acceptable)
 
 # Usage
