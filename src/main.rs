@@ -1,7 +1,3 @@
-use std::io::Write;
-
-use std::thread::scope;
-
 use crossbeam_channel::bounded;
 use crossbeam_channel::{Sender, Receiver};
 use rand::{Rng, SeedableRng, RngCore};
@@ -16,9 +12,9 @@ fn main() {
 
     create_initial_buffers(&mut buf_tx);
 
-    scope(|s| {
-        s.spawn(move || generate_ascii(buf_rx, ascii_tx));
-        s.spawn(move || output_ascii(ascii_rx, buf_tx));
+    tokio_uring::start(async {
+        tokio_uring::spawn(generate_ascii(buf_rx, ascii_tx));
+        tokio_uring::start(output_ascii(ascii_rx, buf_tx));
     });
 }
 
@@ -29,7 +25,7 @@ fn create_initial_buffers(buf_tx: &mut Sender<Vec<u8>>) {
     }
 }
 
-fn generate_ascii(buf_rx: Receiver<Vec<u8>>, ascii_tx: Sender<Vec<u8>>) {
+async fn generate_ascii(buf_rx: Receiver<Vec<u8>>, ascii_tx: Sender<Vec<u8>>) {
     let mut generator = {
         let seed: u64 = rand::rngs::OsRng.gen();
         XorShiftRng::seed_from_u64(seed)
@@ -47,15 +43,19 @@ fn generate_ascii(buf_rx: Receiver<Vec<u8>>, ascii_tx: Sender<Vec<u8>>) {
         u8_to_ascii(&mut buf);
 
         ascii_tx.send(buf).unwrap();
+
+        tokio::task::yield_now().await;
     }
 }
 
-fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
-    let mut output = std::io::stdout().lock();
+async fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
+    let mut output = tokio_uring::fs::File::open("/dev/stdout").await.unwrap();
     while let Ok(buf) = ascii_rx.recv() {
-        output.write_all(&buf).unwrap();
+        let written: usize = 0;
 
-        output.flush().unwrap();
+        while written < buf.len() {
+            written += &output.write_at(&buf[written..], written as u64).await.0.unwrap()
+        }
 
         buf_tx.send(buf).unwrap();
     }
