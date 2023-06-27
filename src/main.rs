@@ -33,7 +33,7 @@ fn main() {
 fn create_initial_buffers(buf_tx: &Sender<Vec<u8>>, buffer_amount: usize) {
     for _ in 0..buffer_amount {
         let buf = vec![0_u8; BUFFER_SIZE];
-        buf_tx.send(buf).await.unwrap();
+        buf_tx.send(buf).unwrap();
     }
 }
 
@@ -43,7 +43,7 @@ fn generate_ascii(buf_rx: &Receiver<Vec<u8>>, ascii_tx: &Sender<Vec<u8>>) {
         XorShiftRng::seed_from_u64(seed)
     };
 
-    while let Some(mut buf) = buf_rx.recv().await {
+    while let Ok(mut buf) = buf_rx.recv() {
     //loop {
         //let mut buf = vec![0_u8; BUFFER_SIZE];
 
@@ -54,17 +54,17 @@ fn generate_ascii(buf_rx: &Receiver<Vec<u8>>, ascii_tx: &Sender<Vec<u8>>) {
 
         u8_to_ascii(&mut buf);
 
-        ascii_tx.send(buf).await.unwrap();
+        ascii_tx.send(buf).unwrap();
 
-        yield_now().await;
+        yield_now();
     }
 }
 
-async fn output_ascii(mut ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
-    let mut output = stdout();
+fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
+    let mut output = std::io::stdout().lock();
 
-    while let Some(buf) = ascii_rx.recv().await {
-        output.write_all(&buf).await.unwrap();
+    while let Ok(buf) = ascii_rx.recv() {
+        output.write_all(&buf).unwrap();
 
         buf_tx.send(buf).unwrap();
 
