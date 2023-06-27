@@ -7,7 +7,7 @@ use crossbeam_channel::{Sender, Receiver};
 use rand::{Rng, SeedableRng, RngCore};
 use rand_xorshift::XorShiftRng;
 
-const BUFFER_SIZE: usize = 4096;
+const BUFFER_SIZE: usize = 1 << 15;
 const BUFFER_AMOUNT: usize = 4;
 
 fn main() {
