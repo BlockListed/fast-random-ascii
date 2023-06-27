@@ -17,12 +17,16 @@ fn main() {
     let buffer_amount = cpu_amount * BUFFER_AMOUNT;
 
     let (ascii_tx, ascii_rx) = bounded(buffer_amount);
+    // This allows buffer reuse and makes allocations extremely unlikely.
+    // They can however still happen, if a buffer with a capacity less than
+    // `BUFFER_SIZE` is given to the channel.
     let (buf_tx, buf_rx) = bounded(buffer_amount);
 
     // Create initial buffers, which are all preallocated
     create_initial_buffers(&buf_tx, buffer_amount);
 
     scope(|s| {
+        // Reserve one cpu core for outputing our results
         for _ in 0..cpu_amount-1 {
             s.spawn(|| generate_ascii(&buf_rx, &ascii_tx));
         }
@@ -38,15 +42,13 @@ fn create_initial_buffers(buf_tx: &Sender<Vec<u8>>, buffer_amount: usize) {
 }
 
 fn generate_ascii(buf_rx: &Receiver<Vec<u8>>, ascii_tx: &Sender<Vec<u8>>) {
+    // This is seeded from the OsRng to increase randomness.
     let mut generator = {
         let seed: u64 = rand::rngs::OsRng.gen();
         XorShiftRng::seed_from_u64(seed)
     };
 
     while let Ok(mut buf) = buf_rx.recv() {
-    //loop {
-        //let mut buf = vec![0_u8; BUFFER_SIZE];
-
         // Make sure our incoming vec is long enough
         make_vec_len(&mut buf, BUFFER_SIZE);
 
@@ -56,18 +58,26 @@ fn generate_ascii(buf_rx: &Receiver<Vec<u8>>, ascii_tx: &Sender<Vec<u8>>) {
 
         ascii_tx.send(buf).unwrap();
 
+        // Make our CPU more happy.
+        // This shouldn't kill performance
+        // thanks to our large buffer sizes.
         yield_now();
     }
 }
 
 fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
+    // Lock stdout to remove Mutex overhead.
     let mut output = std::io::stdout().lock();
 
     while let Ok(buf) = ascii_rx.recv() {
         output.write_all(&buf).unwrap();
 
+        // Return our buffer to the generators.
         buf_tx.send(buf).unwrap();
 
+        // I have no idea, if this actually improves performance,
+        // since we are probably cooperatively yielding
+        // with our syscall in `write_all`.
         yield_now();
     }
 }
@@ -84,7 +94,7 @@ fn make_vec_len<T: Default>(vec: &mut Vec<T>, len: usize) {
 
         let free_space = vec.capacity() - vec.len();
 
-        // Make sure vec length is equal to to capacity.
+        // Make sure vec length is equal to capacity.
         vec.extend(
             std::iter::repeat_with(T::default)
                 .take(free_space)
@@ -99,6 +109,9 @@ fn make_vec_len<T: Default>(vec: &mut Vec<T>, len: usize) {
 }
 
 // High speed, but some chars are more common
+// Also, very vectorization- and inlining-friendly
+// WARNING: first 69 characters are generated 33.3% more often
+// than other characters.
 fn u8_to_ascii(buffer: &mut[u8]) {
     buffer.iter_mut().for_each(|v| {
         *v = (*v % 93) + 32
