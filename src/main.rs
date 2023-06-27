@@ -73,21 +73,29 @@ fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
 }
 
 fn make_vec_len<T: Default>(vec: &mut Vec<T>, len: usize) {
-    if vec.len() >= len {
-        return
+    // This improves inlining and makes this (hopefully)
+    // just a comparison and a function call, if the
+    // comparison fails.
+    #[cold]
+    fn extend_vec<T: Default>(vec: &mut Vec<T>, len: usize) {
+        let additional = len - vec.len();
+
+        vec.reserve(additional);
+
+        let free_space = vec.capacity() - vec.len();
+
+        // Make sure vec length is equal to to capacity.
+        vec.extend(
+            std::iter::repeat_with(T::default)
+                .take(free_space)
+        );
     }
 
-    let additional = len - vec.len();
-
-    vec.reserve(additional);
-
-    let free_space = vec.capacity() - vec.len();
-
-    // Make sure vec length is equal to to capacity.
-    vec.extend(
-        std::iter::repeat_with(T::default)
-            .take(free_space)
-    );
+    if vec.len() >= len {
+        return;
+    } else {
+        extend_vec(vec, len);
+    }
 }
 
 // High speed, but some chars are more common
