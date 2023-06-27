@@ -22,11 +22,11 @@ fn main() {
     // `BUFFER_SIZE` is given to the channel.
     let (buf_tx, buf_rx) = bounded(buffer_amount);
 
-    // Create initial buffers, which are all preallocated
+    // Create initial buffers, which are all preallocated.
     create_initial_buffers(&buf_tx, buffer_amount);
 
     scope(|s| {
-        // Reserve one cpu core for outputing our results
+        // Reserve one cpu core for outputting our results.
         for _ in 0..cpu_amount-1 {
             s.spawn(|| generate_ascii(&buf_rx, &ascii_tx));
         }
@@ -49,7 +49,7 @@ fn generate_ascii(buf_rx: &Receiver<Vec<u8>>, ascii_tx: &Sender<Vec<u8>>) {
     };
 
     while let Ok(mut buf) = buf_rx.recv() {
-        // Make sure our incoming vec is long enough
+        // Make sure our incoming vec is long enough.
         make_vec_len(&mut buf, BUFFER_SIZE);
 
         generator.fill_bytes(&mut buf);
@@ -59,7 +59,7 @@ fn generate_ascii(buf_rx: &Receiver<Vec<u8>>, ascii_tx: &Sender<Vec<u8>>) {
         ascii_tx.send(buf).unwrap();
 
         // Make our CPU more happy.
-        // This shouldn't kill performance
+        // This shouldn't kill performance,
         // thanks to our large buffer sizes.
         yield_now();
     }
@@ -75,7 +75,7 @@ fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
         // Return our buffer to the generators.
         buf_tx.send(buf).unwrap();
 
-        // I have no idea, if this actually improves performance,
+        // I have no idea, if this actually improves niceness,
         // since we are probably cooperatively yielding
         // with our syscall in `write_all`.
         yield_now();
@@ -108,8 +108,8 @@ fn make_vec_len<T: Default>(vec: &mut Vec<T>, len: usize) {
     }
 }
 
-// High speed, but some chars are more common
-// Also, very vectorization- and inlining-friendly
+// High speed, but some chars are more common .
+// Also, very vectorization- and inlining-friendly.
 // WARNING: first 69 characters are generated 33.3% more often
 // than other characters.
 fn u8_to_ascii(buffer: &mut[u8]) {
