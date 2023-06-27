@@ -10,13 +10,10 @@ name = "ascii"
 harness = false
 
 [dependencies]
-crossbeam-channel = "0.5.8"
 rand = "0.8.5"
 rand_xorshift = "0.3.0"
 glommio = "0.8"
 futures-lite = "1.13.0"
-tokio = "1.28"
-tokio-uring = "0.4"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }

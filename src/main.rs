@@ -1,37 +1,42 @@
-use crossbeam_channel::bounded;
-use crossbeam_channel::{Sender, Receiver};
 use rand::{Rng, SeedableRng, RngCore};
 use rand_xorshift::XorShiftRng;
+
+use glommio::{LocalExecutor, spawn_local, yield_if_needed};
+use glommio::channels::local_channel::{LocalReceiver, LocalSender, new_bounded};
+use glommio::io::{BufferedFile, StreamWriterBuilder};
+
+use futures_lite::AsyncWriteExt;
 
 const BUFFER_SIZE: usize = 4096;
 const BUFFER_AMOUNT: usize = 4;
 
 fn main() {
-    let (ascii_tx, ascii_rx) = bounded(BUFFER_AMOUNT);
-    let (mut buf_tx, buf_rx) = bounded(BUFFER_AMOUNT);
+    let (ascii_tx, ascii_rx) = new_bounded(BUFFER_AMOUNT);
+    let (mut buf_tx, buf_rx) = new_bounded(BUFFER_AMOUNT);
 
-    create_initial_buffers(&mut buf_tx);
+    LocalExecutor::default()
+        .run(async {
+            create_initial_buffers(&mut buf_tx).await;
 
-    tokio_uring::start(async {
-        tokio_uring::spawn(generate_ascii(buf_rx, ascii_tx));
-        tokio_uring::start(output_ascii(ascii_rx, buf_tx));
-    });
+            spawn_local(generate_ascii(buf_rx, ascii_tx)).detach();
+            output_ascii(ascii_rx, buf_tx).await;
+        });
 }
 
-fn create_initial_buffers(buf_tx: &mut Sender<Vec<u8>>) {
+async fn create_initial_buffers(buf_tx: &mut LocalSender<Vec<u8>>) {
     for _ in 0..BUFFER_AMOUNT {
         let buf = vec![0_u8; BUFFER_SIZE];
-        buf_tx.send(buf).unwrap();
+        buf_tx.send(buf).await.unwrap();
     }
 }
 
-async fn generate_ascii(buf_rx: Receiver<Vec<u8>>, ascii_tx: Sender<Vec<u8>>) {
+async fn generate_ascii(buf_rx: LocalReceiver<Vec<u8>>, ascii_tx: LocalSender<Vec<u8>>) {
     let mut generator = {
         let seed: u64 = rand::rngs::OsRng.gen();
         XorShiftRng::seed_from_u64(seed)
     };
 
-    while let Ok(mut buf) = buf_rx.recv() {
+    while let Some(mut buf) = buf_rx.recv().await {
     //loop {
         //let mut buf = vec![0_u8; BUFFER_SIZE];
 
@@ -42,22 +47,22 @@ async fn generate_ascii(buf_rx: Receiver<Vec<u8>>, ascii_tx: Sender<Vec<u8>>) {
 
         u8_to_ascii(&mut buf);
 
-        ascii_tx.send(buf).unwrap();
+        ascii_tx.send(buf).await.unwrap();
 
-        tokio::task::yield_now().await;
+        yield_if_needed().await;
     }
 }
 
-async fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
-    let mut output = tokio_uring::fs::File::open("/dev/stdout").await.unwrap();
-    while let Ok(buf) = ascii_rx.recv() {
-        let written: usize = 0;
+async fn output_ascii(ascii_rx: LocalReceiver<Vec<u8>>, buf_tx: LocalSender<Vec<u8>>) {
+    let file = BufferedFile::open("/dev/stdout").await.unwrap();
+    let mut output = StreamWriterBuilder::new(file).with_buffer_size(BUFFER_SIZE).build();
 
-        while written < buf.len() {
-            written += &output.write_at(&buf[written..], written as u64).await.0.unwrap()
-        }
+    while let Some(buf) = ascii_rx.recv().await {
+        output.write_all(&buf).await.unwrap();
 
-        buf_tx.send(buf).unwrap();
+        buf_tx.send(buf).await.unwrap();
+
+        yield_if_needed().await;
     }
 }
 
