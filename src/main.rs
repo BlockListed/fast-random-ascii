@@ -51,7 +51,7 @@ fn generate_ascii(buf_rx: &Receiver<Vec<u8>>, ascii_tx: &Sender<Vec<u8>>) {
 
     while let Ok(mut buf) = buf_rx.recv() {
         // Make sure our incoming vec is long enough.
-        make_vec_len(&mut buf, BUFFER_SIZE);
+        buf.resize_with(BUFFER_SIZE, u8::default);
 
         generator.fill_bytes(&mut buf);
 
@@ -80,32 +80,6 @@ fn output_ascii(ascii_rx: Receiver<Vec<u8>>, buf_tx: Sender<Vec<u8>>) {
         // since we are probably cooperatively yielding
         // with our syscall in `write_all`.
         yield_now();
-    }
-}
-
-fn make_vec_len<T: Default>(vec: &mut Vec<T>, len: usize) {
-    // This improves inlining and makes this (hopefully)
-    // just a comparison and a function call, if the
-    // comparison fails.
-    #[cold]
-    fn extend_vec<T: Default>(vec: &mut Vec<T>, len: usize) {
-        let additional = len - vec.len();
-
-        vec.reserve(additional);
-
-        let free_space = vec.capacity() - vec.len();
-
-        // Make sure vec length is equal to capacity.
-        vec.extend(
-            std::iter::repeat_with(T::default)
-                .take(free_space)
-        );
-    }
-
-    if vec.len() >= len {
-        return;
-    } else {
-        extend_vec(vec, len);
     }
 }
 
