@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use std::cmp::min;
 use std::thread::{scope, yield_now};
 
 use crossbeam_channel::bounded;
@@ -27,7 +28,7 @@ fn main() {
 
     scope(|s| {
         // Reserve one cpu core for outputting our results.
-        for _ in 0..cpu_amount-1 {
+        for _ in 0..min(cpu_amount - 1,1) {
             s.spawn(|| generate_ascii(&buf_rx, &ascii_tx));
         }
         s.spawn(move || output_ascii(ascii_rx, buf_tx));
